@@ -1,21 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+
 //import "./IERC20.sol";
+
+// https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.0.0/contracts/token/ERC20/IERC20.sol
 interface IERC20 {
-    function totalSupply() external view returns (uint256); 
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 amount) external returns (bool);
-    function allowance(address owner, address spender) external view returns (uint256);
-    function approve(address spender, uint256 amount) external returns (bool);
+    function totalSupply() external view returns (uint);
+
+    function balanceOf(address account) external view returns (uint);
+
+    function transfer(address recipient, uint amount) external returns (bool);
+
+    function allowance(address owner, address spender) external view returns (uint);
+
+    function approve(address spender, uint amount) external returns (bool);
+
     function transferFrom(
-        address from,
-        address to,
-        uint256 amount
+        address sender,
+        address recipient,
+        uint amount
     ) external returns (bool);
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    event Transfer(address indexed from, address indexed to, uint value);
+    event Approval(address indexed owner, address indexed spender, uint value);
 }
+
+
 
 
 //utilizing native ERC20 token
@@ -35,6 +46,7 @@ contract CrowdFund {
         uint32 startAt;
         uint32 endAt;
         uint pledged;
+        bool claimed;
     }
 
     IERC20 public immutable token;
@@ -60,6 +72,24 @@ contract CrowdFund {
         uint indexed ID
     );
 
+    event UnpledgedFromProject(
+        address indexed sender,
+        uint indexed amount,
+        uint indexed ID
+    );
+
+    event creatorClaimedFunds(
+        address indexed claimer,
+        uint indexed amount,
+        uint indexed ID
+    );
+
+    event refundedPledge(
+        address indexed refunder,
+        uint indexed amount,
+        uint indexed ID
+    );
+
     constructor(address _token) {
         token = IERC20(_token);
     }
@@ -79,7 +109,8 @@ contract CrowdFund {
             _goal,
             _startAt,
             _endAt,
-            0
+            0,
+            false
         );
         emit ProjectLaunched(_description, projectID, msg.sender, _goal, _startAt, _endAt, 0);
     }
@@ -105,4 +136,43 @@ contract CrowdFund {
 
         emit PledgedToProject(msg.sender, _amount, _id);
     }
- }
+
+    function unpledge(uint _id, uint _amount) external {
+        Project storage project = IdToProject[_id];
+        uint pledgerAmount = userPledgedToProject[_id][msg.sender];
+        require(block.timestamp <= project.endAt, "Project has alreay ended");
+        require(pledgerAmount >= _amount, "Trying to unpledge > amount pledged");
+
+        project.pledged -= _amount;
+        pledgerAmount -= _amount;
+        token.transfer(msg.sender, _amount);
+
+        emit UnpledgedFromProject(msg.sender, _amount, _id);
+    }
+
+    function claim(uint _id) external {
+        Project storage project = IdToProject[_id];
+        require(block.timestamp >= project.endAt, "Fund hasn't ended yet");
+        require(project.creator == msg.sender, "Only the creator can call this function");
+        require(project.pledged >= project.goal, "The goal wasn't reached");
+        require(!project.claimed, "Already claimed");
+
+        project.claimed = true;
+        token.transfer(msg.sender, project.pledged);
+        emit creatorClaimedFunds(msg.sender, project.pledged, _id);
+        
+    }
+
+    function refund(uint _id) external {
+        Project storage project = IdToProject[_id];
+        require(block.timestamp >= project.endAt, "Fund hasn't ended yet");
+        require(project.pledged < project.goal, "The goal wasn't reached");
+        
+        uint balance = userPledgedToProject[_id][msg.sender];
+        userPledgedToProject[_id][msg.sender] = 0;
+        token.transfer(msg.sender, balance);
+
+        emit refundedPledge(msg.sender, balance, _id);
+    }
+
+}
