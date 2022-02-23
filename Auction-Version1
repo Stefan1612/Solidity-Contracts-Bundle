@@ -32,7 +32,6 @@ contract DutchAuction {
         // https://eips.ethereum.org/EIPS/eip-2200)
         _status = _NOT_ENTERED;
     }
-
     //reentrancyGuard end
 
 
