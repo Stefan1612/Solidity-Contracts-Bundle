@@ -7,5 +7,5 @@
 4. ERC20-By-Example
 5. Multi-DelegateCall
 6. MultiSigWallet-Offchain-SigVerify
-
+7. Oracle
 
